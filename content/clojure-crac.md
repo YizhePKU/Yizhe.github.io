@@ -123,7 +123,7 @@ Performance is measured with `perf stat -e task-clock -r50`. I ran the benchmark
 
 Here's the result:
 
-![benchmark result](../images/benchmark.png)
+![benchmark result](../static/benchmark.png)
 
 Some observations:
 
