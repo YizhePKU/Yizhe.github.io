@@ -142,6 +142,11 @@ kbd {
     font-family: monospace;
     font-size: 0.90em;
     line-height: 154%;
+    background-color: #dddddd;
+}
+
+pre>code {
+    background-color: unset;
 }
 
 /* Styles */
