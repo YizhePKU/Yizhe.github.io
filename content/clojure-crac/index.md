@@ -16,9 +16,9 @@ Why do we have to choose between *Clojure that works for everything* and *Clojur
 
 ## Why is Clojure slow to start?
 
-So why is Clojure on the JVM slow to start? I recommand reading [this](https://clojure-goes-fast.com/blog/clojures-slow-start/) if you're interested in the details, but the TL;DR is that **it takes a lot of time to initialize `clojure.core` namespace**. In JVM's term, that means running a bunch of static initialization. Every top-level form in Clojure corresponds to a static field initialized within static initialization blocks.
+So why is Clojure on the JVM slow to start? I recommand reading [this](https://clojure-goes-fast.com/blog/clojures-slow-start/) if you're interested in the details, but the TL;DR is that **it takes a lot of time to initialize `clojure.core` namespace**. In JVM's term, that means running a bunch of static initialization. Every top-level form in Clojure corresponds to a static field, which is initialized with static initialization blocks.
 
-We can test it by compiling a small Clojure program into bytecode. Here's `src/hello.clj`:
+We can see it in action by compiling a small Clojure program into bytecode. Here's `src/hello.clj`:
 
 ```clojure
 (ns hello)
@@ -28,7 +28,7 @@ We can test it by compiling a small Clojure program into bytecode. Here's `src/h
   (println "Hello world!"))
 ```
 
-Run `clj -M -e "(compile 'hello)"` produces *4* `.class` files for the `hello` namespace on my computer:
+Running `clj -M -e "(compile 'hello)"` produces 4 `.class` files:
 
 ```
 hello$fn__128.class
@@ -87,41 +87,59 @@ public class hello__init {
 }
 ```
 
-The `hello__init` class contains 5 static variables, representing Clojure functions and variables. The static initialization block calls `__init0()`, which sets up the static variables.
+The `hello__init` class contains 5 static variables, representing Clojure functions and variables. The static initialization block calls `__init0()`, which sets the static variables.
 
-Remember that `clojure.core` containing over 600 functions and variables! This initialization takes place every time you launch a new REPL or run a script with Clojure, and is the major cause for Clojure's slow start.
+Remember that `clojure.core` containing over 600 functions and variables! This initialization takes place every time you launch a new REPL, and is the major cause for Clojure's slow start.
 
 ## A promising solution: Checkpoint/Restore
 
-[CRIU](https://criu.org/), which stands for Checkpoint/Restore In Userspace, is a linux tool that can freezes a running program and saves ("checkpoint") its state to disk. The saved state can then be restored later multiple times, potentially on a different machine. CRIU can be applied to any Linux programs, including the JVM. [CRaC](https://github.com/CRaC/docs), which stands for Coordinated Restore at Checkpoint, is an OpenJDK side-project that adds support for Checkpoint/Restore from the JVM. It exposes an API for triggering or reacting to Checkpoint/Restore, runs heap cleanup and compaction prior to calling CRIU, checks for open file handles and sockets, and more.
+[CRIU](https://criu.org/), which stands for **Checkpoint/Restore In Userspace**, is a linux tool that can freezes a running program and saves ("checkpoint") its state to disk. The saved state can then be restored later multiple times, potentially on a different machine. CRIU can be applied to any Linux programs, including the JVM. [CRaC](https://github.com/CRaC/docs), which stands for **Coordinated Restore at Checkpoint**, is an OpenJDK side-project that adds support for Checkpoint/Restore from the JVM. It exposes an API for triggering and reacting to Checkpoint/Restore, runs heap cleanup and compaction prior to checkpoint, and more.
 
-The plan of attack is simple. We initialize Clojure once, and request a checkpoint via CRaC. Later, when we want a Clojure REPL, we ask CRaC to restore JVM from the checkpoint. The restore process is fast, and from now everything works exactly the same as normal JVM Clojure -- JIT compilation, dymanic class loading, etc.
+The plan of attack is simple. We initialize Clojure once, then request a checkpoint via CRaC. Later, when we want a Clojure REPL, we ask CRaC to restore from the checkpoint. The restore process is fast, and from now everything works exactly the same as normal JVM Clojure -- JIT compilation, dymanic class loading, etc.
 
-Here's a step-by-step guide if you want to try for yourself. I plan to package the whole thing into something like docker eventually, but for now you'll have to do it manually.
+Here's a step-by-step guide if you want to try for yourself. I plan to package the whole thing into something like docker eventually, but for now you'll have to do it yourself.
 
 1. Download [the latest build of JDK with CRaC](https://github.com/CRaC/openjdk-builds/releases). Unpack it with `sudo` (`sudo` is necessary because `criu` is a setuid executable).
 2. Download [Clojure as a JAR file](https://clojure.org/releases/downloads). I'll use 1.8 for the experiment and benchmark.
-3. Run `<your-JDK-dir>/bin/java -cp clojure-1.8.0.jar -XX:CRaCCheckpointTo=my_checkpoint clojure.main -e '(jdk.crac.Core/checkpointRestore)'`. We're telling Clojure to request a checkpoint immediately upon finishing initialization (via `jdk.crac.Core/checkpointRestore`). The checkpoint will be saved in `my_checkpoint/`.
-4. When we want a Clojure REPL, run `<your-JDK-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main`. This will restore the checkpoint and transfer control to `clojure.main`, which starts a fresh REPL.
+3. To create a checkpoint, run 
+
+```bash
+<JDK-CRaC-dir>/bin/java -XX:CRaCCheckpointTo=my_checkpoint -cp clojure-1.8.0.jar clojure.main -e '(jdk.crac.Core/checkpointRestore)'
+```
+
+We're telling Clojure to request a checkpoint immediately upon finishing initialization (via `jdk.crac.Core/checkpointRestore`). The checkpoint will be saved in `my_checkpoint`.
+
+4. When we want a Clojure REPL, run
+
+```bash
+<JDK-CRaC-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main
+```
+
+This will restore the checkpoint and transfer control to `clojure.main`, which starts a fresh REPL.
 
 Notes:
-* You may pass extra command line arguments when restoring the checkpoint. Those arguments are forwarded to `clojure.main`. For example, to execute `src/core.clj`, you may run `<your-JDK-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main src/core.clj`.[^2]
-* The checkpoint refers to the original `clojure-1.8.0.jar` by absolute path. You need to make sure it stays where it is when you restore the checkpoint.
-* By default, the checkpoint is not portable across machines and Linux distros. There are ways to make it portable[^3], and hopeful this will improve as the project matures.
-* You may initialize additional namespaces by calling `require` (or doing any sort of JVM warm up, really) before calling `jdk.crac.Core/checkpointRestore`, which can further reduce startup time depending on your use case.
+* You may pass extra command line arguments when restoring the checkpoint. Those arguments are forwarded to `clojure.main`. For example, to execute `src/core.clj`, you may run [^2]
+
+```bash
+<JDK-CRaC-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main src/core.clj
+```
+
+* The checkpoint refers to `clojure-1.8.0.jar` by absolute path. You need to make sure it stays where it is when you restore the checkpoint.
+* By default, the checkpoint is not portable across machines and Linux distros. There are [ways to make it portable](https://cr.openjdk.org/~heidinga/crac/Portability_of_checkpoints.pdf), and hopeful this will improve as the project matures.
+* You may initialize additional namespaces (or doing any sort of JVM warm up, really) before calling `jdk.crac.Core/checkpointRestore`, which can further reduce startup time depending on your use case.
 
 ## Benchmark
 
 We'll benchmark the time it takes to finish executing `(println "Hello world!")` for the following Clojure runtimes:
 
 * `openjdk-17-crac+5`
-* `openjdk-17-crac+5` with dynamic CDS enabled[^4]
+* `openjdk-17-crac+5` with [dynamic CDS](https://docs.oracle.com/en/java/javase/17/vm/class-data-sharing.html) enabled
 * `openjdk-17-crac+5` with Checkpoint/Restore
 * Babashka v1.3.182
 
 Performance is measured with `perf stat -e task-clock -r50`. I ran the benchmark on my laptop with a 3.20 GHz AMD Ryzen 7 5800H in a NixOS VM.
 
-Here's the result:
+Here's the result (lower is better):
 
 ![benchmark result](benchmark.png)
 
@@ -129,7 +147,8 @@ Some observations:
 
 * Checkpoint/Restore starts up very fast, on par with Babashka
 * With OpenJDK (both with CDS and without CDS), task-clock is 2~3x wall clock, indicating efficient usage of multiple CPU cores. Not so with Checkpoint/Restore or Babashka
-* For Checkpoint/Restore and Babashka, the hello-world example finishes within milliseconds, and this benchmark is probably not accurate any more. You should not use the result of this benchmark to compare the performance between Checkpoint/Restore and Babashka.
+* For Checkpoint/Restore and Babashka, the hello-world example finishes within milliseconds, and this benchmark is probably not accurate any more.
+* Checkpoint/Restore takes longer to initialize than babashka (as seen from the wall-clock), but most of the time is probably spent waiting on IO (as seen from the task-clock)
 
 Let's also run through file sizes:
 
@@ -143,10 +162,8 @@ Checkpoint/Restore is a promising technique to improve Clojure startup time with
 
 The next post will be about integrating Checkpoint/Restore with tools.deps and the Clojure CLI tools. Stay tuned!
 
+## Footnotes
+
 [^1]: Babashka uses [GraalVM Native Image](https://www.graalvm.org/) to compile Java bytecode into native code ahead-of-time. This process requires that all the bytecode called at run time must be known (observed and analyzed) at build time (known as the "closed world assumption"). Normally, Clojure compiles your code into Java bytecode and loads them into the JVM on the fly, but this is not possible with GraalVM Native Image. As a workaround, Babashka embeds a Clojure interpreter to evaluate Clojure code directly without compiling to Java bytecode.
 
 [^2]: There's currently a bug where if you pass `-e '(println "Hello world!")'` as arguments, Clojure will see only `-e '(println` and treat whitespace as EOF. A workaround is to use `\n` instead of whitespace, like so: `-e $'(println\n"Hello-world!")'`
-
-[^3]: https://cr.openjdk.org/~heidinga/crac/Portability_of_checkpoints.pdf
-
-[^4]: https://docs.oracle.com/en/java/javase/17/vm/class-data-sharing.html
