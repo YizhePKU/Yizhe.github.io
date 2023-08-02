@@ -105,9 +105,9 @@ Here's a step-by-step guide if you want to try for yourself. I plan to package t
 4. When we want a Clojure REPL, run `<your-JDK-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main`. This will restore the checkpoint and transfer control to `clojure.main`, which starts a fresh REPL.
 
 Notes:
-* You may pass extra command line arguments when restoring the checkpoint. Those arguments are forwarded to `clojure.main`. For example, to execute `src/core.clj`, you may run `<your-JDK-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main src/core.clj`.[^4]
+* You may pass extra command line arguments when restoring the checkpoint. Those arguments are forwarded to `clojure.main`. For example, to execute `src/core.clj`, you may run `<your-JDK-dir>/bin/java -XX:CRaCRestoreFrom=my_checkpoint clojure.main src/core.clj`.[^2]
 * The checkpoint refers to the original `clojure-1.8.0.jar` by absolute path. You need to make sure it stays where it is when you restore the checkpoint.
-* By default, the checkpoint is not portable across machines and Linux distros. There are ways to make it portable[^2], and hopeful this will improve as the project matures.
+* By default, the checkpoint is not portable across machines and Linux distros. There are ways to make it portable[^3], and hopeful this will improve as the project matures.
 * You may initialize additional namespaces by calling `require` (or doing any sort of JVM warm up, really) before calling `jdk.crac.Core/checkpointRestore`, which can further reduce startup time depending on your use case.
 
 ## Benchmark
@@ -115,7 +115,7 @@ Notes:
 We'll benchmark the time it takes to finish executing `(println "Hello world!")` for the following Clojure runtimes:
 
 * `openjdk-17-crac+5`
-* `openjdk-17-crac+5` with dynamic CDS enabled[^3]
+* `openjdk-17-crac+5` with dynamic CDS enabled[^4]
 * `openjdk-17-crac+5` with Checkpoint/Restore
 * Babashka v1.3.182
 
@@ -145,8 +145,8 @@ The next post will be about integrating Checkpoint/Restore with tools.deps and t
 
 [^1]: Babashka uses [GraalVM Native Image](https://www.graalvm.org/) to compile Java bytecode into native code ahead-of-time. This process requires that all the bytecode called at run time must be known (observed and analyzed) at build time (known as the "closed world assumption"). Normally, Clojure compiles your code into Java bytecode and loads them into the JVM on the fly, but this is not possible with GraalVM Native Image. As a workaround, Babashka embeds a Clojure interpreter to evaluate Clojure code directly without compiling to Java bytecode.
 
-[^2]: https://cr.openjdk.org/~heidinga/crac/Portability_of_checkpoints.pdf
+[^2]: There's currently a bug where if you pass `-e '(println "Hello world!")'` as arguments, Clojure will see only `-e '(println` and treat whitespace as EOF. A workaround is to use `\n` instead of whitespace, like so: `-e $'(println\n"Hello-world!")'`
 
-[^3]: https://docs.oracle.com/en/java/javase/17/vm/class-data-sharing.html
+[^3]: https://cr.openjdk.org/~heidinga/crac/Portability_of_checkpoints.pdf
 
-[^4]: There's currently a bug where if you pass `-e '(println "Hello world!")'` as arguments, Clojure will see only `-e '(println` and treat whitespace as EOF. A workaround is to use `\n` instead of whitespace, like so: `-e $'(println\n"Hello-world!")'`
+[^4]: https://docs.oracle.com/en/java/javase/17/vm/class-data-sharing.html
