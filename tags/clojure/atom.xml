@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>Yizhe&#x27;s Notebook - clojure</title>
+    <link href="https://yizhepku.github.io/tags/clojure/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://yizhepku.github.io/"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2023-08-03T00:00:00+00:00</updated>
+    <id>https://yizhepku.github.io/tags/clojure/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 2)</title>
+        <published>2023-08-03T00:00:00+00:00</published>
+        <updated>2023-08-03T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://yizhepku.github.io/clojure-crac-part2/" type="text/html"/>
+        <id>https://yizhepku.github.io/clojure-crac-part2/</id>
+        
+        <summary type="html">&lt;p&gt;In &lt;a href=&quot;https:&#x2F;&#x2F;yizhepku.github.io&#x2F;clojure-crac&#x2F;&quot;&gt;part 1&lt;&#x2F;a&gt;, we explored how Checkpoint&#x2F;Restore can be used to improve Clojure startup time without giving up on the power of third-party libraries. In this post, we&#x27;ll look at ways to actually use third-party libraries with Checkpoint&#x2F;Restore.&lt;&#x2F;p&gt;
+</summary>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 1)</title>
+        <published>2023-08-01T00:00:00+00:00</published>
+        <updated>2023-08-01T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://yizhepku.github.io/clojure-crac/" type="text/html"/>
+        <id>https://yizhepku.github.io/clojure-crac/</id>
+        
+        <summary type="html">&lt;p&gt;It is well-known that Clojure has a long startup time. Even with years of improvement on the JVM and Clojure itself, getting to the REPL still takes seconds. This makes JVM Clojure unsuitable for short-living programs, such as command lines utilities.&lt;&#x2F;p&gt;
+&lt;p&gt;Then there is &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;babashka&#x2F;babashka&quot;&gt;Babashka&lt;&#x2F;a&gt;, which starts instantly and works &lt;em&gt;mostly&lt;&#x2F;em&gt; like JVM Clojure. In Babashka, there is no JVM, instead &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;borkdude&#x2F;sci&quot;&gt;a custom interpreter&lt;&#x2F;a&gt; runs your Clojure Code. You can&#x27;t use Java classes except those built into with Babashka. Existing Clojure libraries may or may not work depending on what Java classes they use underneath. Babashka is great for simple scripts, but comes short when you need third-party libraries.&lt;&#x2F;p&gt;
+&lt;p&gt;Why do we have to choose between &lt;em&gt;Clojure that works for everything&lt;&#x2F;em&gt; and &lt;em&gt;Clojure that starts fast&lt;&#x2F;em&gt;? If only we could combine the power of JVM Clojure and the speed of Babashka...&lt;&#x2F;p&gt;
+</summary>
+        
+    </entry>
+</feed>

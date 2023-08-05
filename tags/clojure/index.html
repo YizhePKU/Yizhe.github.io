@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+
+    <title>clojure</title>
+    <meta name="description" content="">
+
+    <link rel="stylesheet" href="https://yizhepku.github.io/main.css">
+
+    
+
+    
+    
+</head>
+<body>
+    <a class="skip-main" href="#main">Skip to content</a>
+    <div class="container">
+        <header> 
+            <h1 class="site-header">
+                <a href="https:&#x2F;&#x2F;yizhepku.github.io&#x2F;">Yizhe&#x27;s Notebook</a>
+            </h1>
+            <nav>
+                
+                
+                
+            </nav>
+        </header>
+        <main id="main" tabindex="-1">
+            
+<h1>Tag: #clojure</h1>
+<div class="article-info">
+    <a href="https://yizhepku.github.io/tags">To all tags</a>
+</div>
+
+
+
+    <article class="post-list">
+        <header> 
+            <h1>
+                <a href="https:&#x2F;&#x2F;yizhepku.github.io&#x2F;clojure-crac-part2&#x2F;">Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 2)</a>
+            </h1>
+        </header>
+
+        
+        <div class="content post-summary">
+            <p>In <a href="https://yizhepku.github.io/clojure-crac/">part 1</a>, we explored how Checkpoint/Restore can be used to improve Clojure startup time without giving up on the power of third-party libraries. In this post, we'll look at ways to actually use third-party libraries with Checkpoint/Restore.</p>
+
+        </div>
+        
+        
+        
+    <div class="article-info">
+        
+        <div class="article-date"> 3 August 2023</div>
+        
+        <div class="article-taxonomies">
+            
+            
+                <ul class="article-tags">
+                    
+                    <li><a href="https://yizhepku.github.io/tags/clojure/">#clojure</a></li>
+                    
+                </ul>
+            
+        </div>
+    </div>
+
+    </article>
+
+
+
+    <article class="post-list">
+        <header> 
+            <h1>
+                <a href="https:&#x2F;&#x2F;yizhepku.github.io&#x2F;clojure-crac&#x2F;">Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 1)</a>
+            </h1>
+        </header>
+
+        
+        <div class="content post-summary">
+            <p>It is well-known that Clojure has a long startup time. Even with years of improvement on the JVM and Clojure itself, getting to the REPL still takes seconds. This makes JVM Clojure unsuitable for short-living programs, such as command lines utilities.</p>
+<p>Then there is <a href="https://github.com/babashka/babashka">Babashka</a>, which starts instantly and works <em>mostly</em> like JVM Clojure. In Babashka, there is no JVM, instead <a href="https://github.com/borkdude/sci">a custom interpreter</a> runs your Clojure Code. You can't use Java classes except those built into with Babashka. Existing Clojure libraries may or may not work depending on what Java classes they use underneath. Babashka is great for simple scripts, but comes short when you need third-party libraries.</p>
+<p>Why do we have to choose between <em>Clojure that works for everything</em> and <em>Clojure that starts fast</em>? If only we could combine the power of JVM Clojure and the speed of Babashka...</p>
+
+        </div>
+        
+        
+        
+    <div class="article-info">
+        
+        <div class="article-date"> 1 August 2023</div>
+        
+        <div class="article-taxonomies">
+            
+            
+                <ul class="article-tags">
+                    
+                    <li><a href="https://yizhepku.github.io/tags/clojure/">#clojure</a></li>
+                    
+                </ul>
+            
+        </div>
+    </div>
+
+    </article>
+
+
+
+
+        </main>
+        <footer>
+            <p>
+                © Yizhe&#x27;s Notebook 2023<br>
+                Powered by <a target="_blank" href="https://getzola.org/">Zola</a>, Theme <a target="_blank" href="https://github.com/zbrox/anpu-zola-theme">Anpu</a>.
+            </p>
+            <p>
+                
+                
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

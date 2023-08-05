@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+
+    <title>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 1)</title>
+    <meta name="description" content="">
+
+    <link rel="stylesheet" href="https://yizhepku.github.io/main.css">
+
+    
+
+    
+    
+</head>
+<body>
+    <a class="skip-main" href="#main">Skip to content</a>
+    <div class="container">
+        <header> 
+            <h1 class="site-header">
+                <a href="https:&#x2F;&#x2F;yizhepku.github.io&#x2F;">Yizhe&#x27;s Notebook</a>
+            </h1>
+            <nav>
+                
+                
+                
+            </nav>
+        </header>
+        <main id="main" tabindex="-1">
+            
+
+<article class="post">
+    <header>
+        <h1>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 1)</h1>
+    </header>
+    <div class="content">
+        <p>It is well-known that Clojure has a long startup time. Even with years of improvement on the JVM and Clojure itself, getting to the REPL still takes seconds. This makes JVM Clojure unsuitable for short-living programs, such as command lines utilities.</p>
+<p>Then there is <a href="https://github.com/babashka/babashka">Babashka</a>, which starts instantly and works <em>mostly</em> like JVM Clojure. In Babashka, there is no JVM, instead <a href="https://github.com/borkdude/sci">a custom interpreter</a> runs your Clojure Code.<sup class="footnote-reference"><a href="#1">1</a></sup> You can't use Java classes except those built into with Babashka. Existing Clojure libraries may or may not work depending on what Java classes they use underneath. Babashka is great for simple scripts, but comes short when you need third-party libraries.</p>
+<p>Why do we have to choose between <em>Clojure that works for everything</em> and <em>Clojure that starts fast</em>? If only we could combine the power of JVM Clojure and the speed of Babashka...</p>
+<span id="continue-reading"></span><h2 id="why-is-clojure-slow-to-start">Why is Clojure slow to start?</h2>
+<p>So why is Clojure on the JVM slow to start? I recommand reading <a href="https://clojure-goes-fast.com/blog/clojures-slow-start/">this</a> if you're interested in the details, but the TL;DR is that <strong>it takes a lot of time to initialize <code>clojure.core</code> namespace</strong>. In JVM's term, that means running a bunch of static initialization. Every top-level form in Clojure corresponds to a static field, which is initialized with static initialization blocks.</p>
+<p>We can see it in action by compiling a small Clojure program into bytecode. Here's <code>src/hello.clj</code>:</p>
+<pre data-lang="clojure" style="background-color:#2b303b;color:#c0c5ce;" class="language-clojure "><code class="language-clojure" data-lang="clojure"><span>(</span><span style="color:#bf616a;">ns</span><span> hello)
+</span><span>
+</span><span>(</span><span style="color:#b48ead;">defn </span><span style="color:#8fa1b3;">hello-world
+</span><span>  []
+</span><span>  (</span><span style="color:#bf616a;">println </span><span>&quot;</span><span style="color:#a3be8c;">Hello world!</span><span>&quot;))
+</span></code></pre>
+<p>Running <code>clj -M -e &quot;(compile 'hello)&quot;</code> produces 4 <code>.class</code> files:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>hello$fn__128.class
+</span><span>hello$hello_world.class
+</span><span>hello$loading__6789__auto____126.class
+</span><span>hello__init.class
+</span></code></pre>
+<p>Using <a href="https://mvnrepository.com/artifact/com.jetbrains.intellij.java/java-decompiler-engine">Intellij's Java decompiler</a>, we can take a look at what these <code>.class</code> files contain. Here's <code>hello__init.java</code>:</p>
+<pre data-lang="java" style="background-color:#2b303b;color:#c0c5ce;" class="language-java "><code class="language-java" data-lang="java"><span style="color:#b48ead;">public class </span><span style="color:#ebcb8b;">hello__init </span><span style="color:#eff1f5;">{
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static final </span><span style="color:#ebcb8b;">Var </span><span style="color:#eff1f5;">const__0;
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static final </span><span style="color:#ebcb8b;">AFn </span><span style="color:#eff1f5;">const__1;
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static final </span><span style="color:#ebcb8b;">AFn </span><span style="color:#eff1f5;">const__2;
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static final </span><span style="color:#ebcb8b;">Var </span><span style="color:#eff1f5;">const__3;
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static final </span><span style="color:#ebcb8b;">AFn </span><span style="color:#eff1f5;">const__11;
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static void </span><span style="color:#8fa1b3;">load</span><span style="color:#eff1f5;">() {
+</span><span style="color:#eff1f5;">      ((</span><span style="color:#ebcb8b;">IFn</span><span style="color:#eff1f5;">)const__0.</span><span style="color:#bf616a;">getRawRoot</span><span style="color:#eff1f5;">()).</span><span style="color:#bf616a;">invoke</span><span style="color:#eff1f5;">(const__1);
+</span><span style="color:#eff1f5;">      ((</span><span style="color:#ebcb8b;">IFn</span><span style="color:#eff1f5;">)(</span><span style="color:#b48ead;">new </span><span style="color:#bf616a;">hello$loading__6789__auto____126</span><span style="color:#eff1f5;">())).</span><span style="color:#bf616a;">invoke</span><span style="color:#eff1f5;">();
+</span><span style="color:#eff1f5;">      </span><span style="color:#ebcb8b;">Object</span><span style="color:#eff1f5;"> var10002;
+</span><span style="color:#eff1f5;">      </span><span style="color:#b48ead;">if </span><span style="color:#eff1f5;">(((</span><span style="color:#ebcb8b;">Symbol</span><span style="color:#eff1f5;">)const__1).</span><span style="color:#bf616a;">equals</span><span style="color:#eff1f5;">(const__2)) {
+</span><span style="color:#eff1f5;">         var10002 </span><span>= </span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">;
+</span><span style="color:#eff1f5;">      } </span><span style="color:#b48ead;">else </span><span style="color:#eff1f5;">{
+</span><span style="color:#eff1f5;">         </span><span style="color:#ebcb8b;">LockingTransaction</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">runInTransaction</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">Callable</span><span style="color:#eff1f5;">)(</span><span style="color:#b48ead;">new </span><span style="color:#bf616a;">hello$fn__128</span><span style="color:#eff1f5;">()));
+</span><span style="color:#eff1f5;">         var10002 </span><span>= </span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">;
+</span><span style="color:#eff1f5;">      }
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">      </span><span style="color:#ebcb8b;">Var</span><span style="color:#eff1f5;"> var10003 </span><span>=</span><span style="color:#eff1f5;"> const__3;
+</span><span style="color:#eff1f5;">      var10003.</span><span style="color:#bf616a;">setMeta</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">IPersistentMap</span><span style="color:#eff1f5;">)const__11);
+</span><span style="color:#eff1f5;">      var10003.</span><span style="color:#bf616a;">bindRoot</span><span style="color:#eff1f5;">(</span><span style="color:#b48ead;">new </span><span style="color:#bf616a;">hello$hello_world</span><span style="color:#eff1f5;">());
+</span><span style="color:#eff1f5;">   }
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">public static void </span><span style="color:#8fa1b3;">__init0</span><span style="color:#eff1f5;">() {
+</span><span style="color:#eff1f5;">      const__0 </span><span>= </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">Var</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">var</span><span style="color:#eff1f5;">(</span><span>&quot;</span><span style="color:#a3be8c;">clojure.core</span><span>&quot;</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">in-ns</span><span>&quot;</span><span style="color:#eff1f5;">);
+</span><span style="color:#eff1f5;">      const__1 </span><span>= </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">AFn</span><span style="color:#eff1f5;">)</span><span style="color:#ebcb8b;">Symbol</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">intern</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">hello</span><span>&quot;</span><span style="color:#eff1f5;">);
+</span><span style="color:#eff1f5;">      const__2 </span><span>= </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">AFn</span><span style="color:#eff1f5;">)</span><span style="color:#ebcb8b;">Symbol</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">intern</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">clojure.core</span><span>&quot;</span><span style="color:#eff1f5;">);
+</span><span style="color:#eff1f5;">      const__3 </span><span>= </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">Var</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">var</span><span style="color:#eff1f5;">(</span><span>&quot;</span><span style="color:#a3be8c;">hello</span><span>&quot;</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">hello-world</span><span>&quot;</span><span style="color:#eff1f5;">);
+</span><span style="color:#eff1f5;">      const__11 </span><span>= </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">AFn</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">map</span><span style="color:#eff1f5;">(</span><span style="color:#b48ead;">new </span><span style="color:#ebcb8b;">Object</span><span style="color:#eff1f5;">[]{</span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">keyword</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">arglists</span><span>&quot;</span><span style="color:#eff1f5;">), </span><span style="color:#ebcb8b;">PersistentList</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">create</span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">Arrays</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">asList</span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">Tuple</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">create</span><span style="color:#eff1f5;">())), </span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">keyword</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">line</span><span>&quot;</span><span style="color:#eff1f5;">), </span><span style="color:#d08770;">3</span><span style="color:#eff1f5;">, </span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">keyword</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">column</span><span>&quot;</span><span style="color:#eff1f5;">), </span><span style="color:#d08770;">1</span><span style="color:#eff1f5;">, </span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">keyword</span><span style="color:#eff1f5;">((</span><span style="color:#ebcb8b;">String</span><span style="color:#eff1f5;">)</span><span style="color:#d08770;">null</span><span style="color:#eff1f5;">, </span><span>&quot;</span><span style="color:#a3be8c;">file</span><span>&quot;</span><span style="color:#eff1f5;">), </span><span>&quot;</span><span style="color:#a3be8c;">hello.clj</span><span>&quot;</span><span style="color:#eff1f5;">});
+</span><span style="color:#eff1f5;">   }
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">   </span><span style="color:#b48ead;">static </span><span style="color:#eff1f5;">{
+</span><span style="color:#eff1f5;">      </span><span style="color:#bf616a;">__init0</span><span style="color:#eff1f5;">();
+</span><span style="color:#eff1f5;">      </span><span style="color:#ebcb8b;">Compiler</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">pushNSandLoader</span><span style="color:#eff1f5;">(</span><span style="color:#d08770;">RT</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">classForName</span><span style="color:#eff1f5;">(</span><span>&quot;</span><span style="color:#a3be8c;">hello__init</span><span>&quot;</span><span style="color:#eff1f5;">).</span><span style="color:#bf616a;">getClassLoader</span><span style="color:#eff1f5;">());
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">      </span><span style="color:#b48ead;">try </span><span style="color:#eff1f5;">{
+</span><span style="color:#eff1f5;">         </span><span style="color:#bf616a;">load</span><span style="color:#eff1f5;">();
+</span><span style="color:#eff1f5;">      } </span><span style="color:#b48ead;">catch </span><span style="color:#eff1f5;">(</span><span style="color:#ebcb8b;">Throwable </span><span style="color:#bf616a;">var1</span><span style="color:#eff1f5;">) {
+</span><span style="color:#eff1f5;">         </span><span style="color:#ebcb8b;">Var</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">popThreadBindings</span><span style="color:#eff1f5;">();
+</span><span style="color:#eff1f5;">         </span><span style="color:#b48ead;">throw</span><span style="color:#eff1f5;"> var1;
+</span><span style="color:#eff1f5;">      }
+</span><span style="color:#eff1f5;">
+</span><span style="color:#eff1f5;">      </span><span style="color:#ebcb8b;">Var</span><span style="color:#eff1f5;">.</span><span style="color:#bf616a;">popThreadBindings</span><span style="color:#eff1f5;">();
+</span><span style="color:#eff1f5;">   }
+</span><span style="color:#eff1f5;">}
+</span></code></pre>
+<p>The <code>hello__init</code> class contains 5 static variables, representing Clojure functions and variables. The static initialization block calls <code>__init0()</code>, which sets the static variables.</p>
+<p>Remember that <code>clojure.core</code> containing over 600 functions and variables! This initialization takes place every time you launch a new REPL, and is the major cause for Clojure's slow start.</p>
+<h2 id="a-promising-solution-checkpoint-restore">A promising solution: Checkpoint/Restore</h2>
+<p><a href="https://criu.org/">CRIU</a>, which stands for <strong>Checkpoint/Restore In Userspace</strong>, is a linux tool that can freezes a running program and saves (&quot;checkpoint&quot;) its state to disk. The saved state can then be restored later multiple times, potentially on a different machine. CRIU can be applied to any Linux programs, including the JVM. <a href="https://github.com/CRaC/docs">CRaC</a>, which stands for <strong>Coordinated Restore at Checkpoint</strong>, is an OpenJDK side-project that adds support for Checkpoint/Restore from the JVM. It exposes an API for triggering and reacting to Checkpoint/Restore, runs heap cleanup and compaction prior to checkpoint, and more.</p>
+<p>The plan of attack is simple. We initialize Clojure once, then request a checkpoint via CRaC. Later, when we want a Clojure REPL, we ask CRaC to restore from the checkpoint. The restore process is fast, and from now everything works exactly the same as normal JVM Clojure -- JIT compilation, dymanic class loading, etc.</p>
+<p>Here's a step-by-step guide if you want to try for yourself. I plan to package the whole thing into something like docker eventually, but for now you'll have to do it yourself.</p>
+<ol>
+<li>Download <a href="https://github.com/CRaC/openjdk-builds/releases">the latest build of JDK with CRaC</a>. Unpack it with <code>sudo</code> (<code>sudo</code> is necessary because <code>criu</code> is a setuid executable).</li>
+<li>Download <a href="https://clojure.org/releases/downloads">Clojure as a JAR file</a>. I'll use 1.8 for the experiment and benchmark.</li>
+<li>To create a checkpoint, run </li>
+</ol>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">-XX:CRaCCheckpointTo</span><span>=</span><span style="color:#a3be8c;">my_checkpoint </span><span style="color:#bf616a;">-cp</span><span> clojure-1.8.0.jar clojure.main</span><span style="color:#bf616a;"> -e </span><span>&#39;</span><span style="color:#a3be8c;">(jdk.crac.Core/checkpointRestore)</span><span>&#39;
+</span></code></pre>
+<p>We're telling Clojure to request a checkpoint immediately upon finishing initialization (via <code>jdk.crac.Core/checkpointRestore</code>). The checkpoint will be saved in <code>my_checkpoint</code>.</p>
+<ol start="4">
+<li>When we want a Clojure REPL, run</li>
+</ol>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">-XX:CRaCRestoreFrom</span><span>=</span><span style="color:#a3be8c;">my_checkpoint </span><span style="color:#bf616a;">clojure.main
+</span></code></pre>
+<p>This will restore the checkpoint and transfer control to <code>clojure.main</code>, which starts a fresh REPL.</p>
+<p>Notes:</p>
+<ul>
+<li>You may pass extra command line arguments when restoring the checkpoint. Those arguments are forwarded to <code>clojure.main</code>. For example, to execute <code>src/core.clj</code>, you may run <sup class="footnote-reference"><a href="#2">2</a></sup></li>
+</ul>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">-XX:CRaCRestoreFrom</span><span>=</span><span style="color:#a3be8c;">my_checkpoint </span><span style="color:#bf616a;">clojure.main</span><span> src/core.clj
+</span></code></pre>
+<ul>
+<li>The checkpoint refers to <code>clojure-1.8.0.jar</code> by absolute path. You need to make sure it stays where it is when you restore the checkpoint.</li>
+<li>By default, the checkpoint is not portable across machines and Linux distros. There are <a href="https://cr.openjdk.org/~heidinga/crac/Portability_of_checkpoints.pdf">ways to make it portable</a>, and hopeful this will improve as the project matures.</li>
+<li>You may initialize additional namespaces (or doing any sort of JVM warm up, really) before calling <code>jdk.crac.Core/checkpointRestore</code>, which can further reduce startup time depending on your use case.</li>
+</ul>
+<h2 id="benchmark">Benchmark</h2>
+<p>We'll benchmark the time it takes to finish executing <code>(println &quot;Hello world!&quot;)</code> for the following Clojure runtimes:</p>
+<ul>
+<li><code>openjdk-17-crac+5</code></li>
+<li><code>openjdk-17-crac+5</code> with <a href="https://docs.oracle.com/en/java/javase/17/vm/class-data-sharing.html">dynamic CDS</a> enabled</li>
+<li><code>openjdk-17-crac+5</code> with Checkpoint/Restore</li>
+<li>Babashka v1.3.182</li>
+</ul>
+<p>Performance is measured with <code>perf stat -e task-clock -r50</code>. I ran the benchmark on my laptop with a 3.20 GHz AMD Ryzen 7 5800H in a NixOS VM.</p>
+<p>Here's the result (lower is better):</p>
+<p><img src="https://yizhepku.github.io/clojure-crac/benchmark.png" alt="benchmark result" /></p>
+<p>Some observations:</p>
+<ul>
+<li>Checkpoint/Restore starts up very fast, on par with Babashka</li>
+<li>With OpenJDK (both with CDS and without CDS), task-clock is 2~3x wall clock, indicating efficient usage of multiple CPU cores. Not so with Checkpoint/Restore or Babashka</li>
+<li>For Checkpoint/Restore and Babashka, the hello-world example finishes within milliseconds, and this benchmark is probably not accurate any more.</li>
+<li>Checkpoint/Restore takes longer to initialize than babashka (as seen from the wall-clock), but most of the time is probably spent waiting on IO (as seen from the task-clock)</li>
+</ul>
+<p>Let's also run through file sizes:</p>
+<ul>
+<li><code>clojure-1.8.0.jar</code> is 3.5MB</li>
+<li><code>my_checkpoint</code> is 43MB, about 12x larger than <code>clojure-1.8.0.jar</code></li>
+<li><code>babashka-1.3.182</code> is a 86MB standalone executable, which does not depend on JVM</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>Checkpoint/Restore is a promising technique to improve Clojure startup time without sacraficing power. CRaC is still in early stage of development, and we can expect constant improvement from now on.</p>
+<p>The next post will be about integrating Checkpoint/Restore with tools.deps and the Clojure CLI tools. Stay tuned!</p>
+<h2 id="footnotes">Footnotes</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>Babashka uses <a href="https://www.graalvm.org/">GraalVM Native Image</a> to compile Java bytecode into native code ahead-of-time. This process requires that all the bytecode called at run time must be known (observed and analyzed) at build time (known as the &quot;closed world assumption&quot;). Normally, Clojure compiles your code into Java bytecode and loads them into the JVM on the fly, but this is not possible with GraalVM Native Image. As a workaround, Babashka embeds a Clojure interpreter to evaluate Clojure code directly without compiling to Java bytecode.</p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p>There's currently a bug where if you pass <code>-e '(println &quot;Hello world!&quot;)'</code> as arguments, Clojure will see only <code>-e '(println</code> and treat whitespace as EOF. A workaround is to use <code>\n</code> instead of whitespace, like so: <code>-e $'(println\n&quot;Hello-world!&quot;)'</code></p>
+</div>
+
+    </div>
+
+    
+    <div class="article-info">
+        
+        <div class="article-date"> 1 August 2023</div>
+        
+        <div class="article-taxonomies">
+            
+            
+                <ul class="article-tags">
+                    
+                    <li><a href="https://yizhepku.github.io/tags/clojure/">#clojure</a></li>
+                    
+                </ul>
+            
+        </div>
+    </div>
+
+</article>
+
+
+        </main>
+        <footer>
+            <p>
+                © Yizhe&#x27;s Notebook 2023<br>
+                Powered by <a target="_blank" href="https://getzola.org/">Zola</a>, Theme <a target="_blank" href="https://github.com/zbrox/anpu-zola-theme">Anpu</a>.
+            </p>
+            <p>
+                
+                
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

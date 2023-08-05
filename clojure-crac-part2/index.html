@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="HandheldFriendly" content="True">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
+
+    <title>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 2)</title>
+    <meta name="description" content="">
+
+    <link rel="stylesheet" href="https://yizhepku.github.io/main.css">
+
+    
+
+    
+    
+</head>
+<body>
+    <a class="skip-main" href="#main">Skip to content</a>
+    <div class="container">
+        <header> 
+            <h1 class="site-header">
+                <a href="https:&#x2F;&#x2F;yizhepku.github.io&#x2F;">Yizhe&#x27;s Notebook</a>
+            </h1>
+            <nav>
+                
+                
+                
+            </nav>
+        </header>
+        <main id="main" tabindex="-1">
+            
+
+<article class="post">
+    <header>
+        <h1>Fast Starting JVM Clojure with Checkpoint&#x2F;Restore (Part 2)</h1>
+    </header>
+    <div class="content">
+        <p>In <a href="https://yizhepku.github.io/clojure-crac/">part 1</a>, we explored how Checkpoint/Restore can be used to improve Clojure startup time without giving up on the power of third-party libraries. In this post, we'll look at ways to actually use third-party libraries with Checkpoint/Restore.</p>
+<span id="continue-reading"></span><h2 id="integrating-clojure-cli-with-checkpoint-restore">Integrating Clojure CLI with Checkpoint/Restore</h2>
+<p>When it comes to dependencies in Clojure, there're two popular choices: <a href="https://leiningen.org">Leiningen</a> and <a href="https://clojure.org/reference/deps_and_cli">Clojure CLI</a>. We'll focus on Clojure CLI in this post, as it is simpler to understand and reverse-engineer.</p>
+<p>In short, Clojure CLI is a Bash script that does two things:</p>
+<ol>
+<li>It looks at your <code>deps.edn</code> and downloads necessary dependencies to <code>~/.m2/repository</code></li>
+<li>It launches Java with the correct classpath</li>
+</ol>
+<p>Clojure CLI honors the <code>JAVA_CMD</code> and <code>JAVA_OPTS</code> environment variables for launching Java. Remember how we created checkpoints in part 1?</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">-XX:CRaCCheckpointTo</span><span>=</span><span style="color:#a3be8c;">my_checkpoint </span><span style="color:#bf616a;">-cp</span><span> clojure-1.8.0.jar clojure.main</span><span style="color:#bf616a;"> -e </span><span>&#39;</span><span style="color:#a3be8c;">(jdk.crac.Core/checkpointRestore)</span><span>&#39;
+</span></code></pre>
+<p>Let's adapt it to utilize Clojure CLI:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span style="color:#bf616a;">JAVA_CMD</span><span>=&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">JAVA_OPTS</span><span>=</span><span style="color:#a3be8c;">-XX:CRaCCheckpointTo=my_checkpoint </span><span style="color:#bf616a;">clj -e </span><span>&#39;</span><span style="color:#a3be8c;">(jdk.crac.Core/checkpointRestore)</span><span>&#39;
+</span></code></pre>
+<p>Clojure CLI will download dependencies and launch Java as usual. The classpath is saved as part of the checkpoint and will be recovered during restore<sup class="footnote-reference"><a href="#1">1</a></sup>:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&lt;JDK-CRaC-dir&gt;/bin/java </span><span style="color:#bf616a;">-XX:CRaCRestoreFrom</span><span>=</span><span style="color:#a3be8c;">my_checkpoint </span><span style="color:#bf616a;">clojure.main
+</span></code></pre>
+<p>There you go! Any libraries that you asked for in <code>deps.edn</code> will be available after the restore. Careful though, the classpath is fixed at checkpoint creation, so any modification to <code>deps.edn</code> requires recreating the checkpoint.</p>
+<h2 id="automated-checkpoint-management">Automated checkpoint management</h2>
+<p>Creating and restoring from checkpoints requires a lot of typing. To make things easier, I created <a href="https://github.com/YizhePKU/Clojure-CLI-CRaC">Clojure-CLI-CRaC</a>, a drop-in Clojure CLI replacement that utilizes Checkpoint/Restore. It detects changes in <code>deps.edn</code> and automatically recreate checkpoints when needed. You can find an install guide in the project README. Put it on your PATH and all your Clojure tooling should now launch faster<sup class="footnote-reference"><a href="#2">2</a></sup>.</p>
+<h2 id="adding-dependencies-at-runtime">Adding dependencies at runtime</h2>
+<p>There is an alternative way to use dependencies with Checkpoint/Restore. Thanks to JVM's dynamic nature, classpath can be queried and modified at runtime, which means we can add dependencies after restoring JVM from the checkpoint. <a href="https://github.com/clj-commons/pomegranate">Pomegranate</a> has been doing it for a while now, and Clojure 1.12 will include support for <a href="https://clojure.org/news/2023/04/14/clojure-1-12-alpha2#_add_libraries_for_interactive_use">adding libraries at runtime</a>. You can use either of these with Checkpoint/Restore.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>By integrating with Clojure CLI, we can make use of arbitrary dependencies while enjoying the speed of Checkpoint/Restore. <a href="https://github.com/YizhePKU/Clojure-CLI-CRaC">Clojure-CLI-CRaC</a> provides an instant upgrade to Clojure CLI with minimal change to your workflow. Please try it out, and I'm hoping to hear your thoughts and feedback.</p>
+<h2 id="footnotes">Footnotes</h2>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>We could also use Clojure CLI for the restore, like so:</p>
+</div>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>JAVA_CMD=&lt;JDK-CRaC-dir&gt;/bin/java JAVA_OPTS=-XX:CRaCRestoreFrom=my_checkpoint clj
+</span></code></pre>
+<p>However, this is no different than just launching Java manually, since most JVM options are ignored during restore. The classpath is recovered from the checkpoint, not from the command line.</p>
+<p><sup class="footnote-reference"><a href="#2">2</a></sup> ...or they could stop working due to <a href="https://yizhepku.github.io/clojure-crac/#2">the upstream bug that I mentioned in part 1</a>, which causes whitespace in command line arguments to be misinterpreted. For example, Calva invokes Clojure CLI with <code>-Sdeps '{:deps {nrepl/nrepl {:mvn/version,&quot;1.0.0&quot;}}}'</code>, which causes trouble. I've reported the bug to the CRaC team, and hopefully it'll be fixed soon.</p>
+
+    </div>
+
+    
+    <div class="article-info">
+        
+        <div class="article-date"> 3 August 2023</div>
+        
+        <div class="article-taxonomies">
+            
+            
+                <ul class="article-tags">
+                    
+                    <li><a href="https://yizhepku.github.io/tags/clojure/">#clojure</a></li>
+                    
+                </ul>
+            
+        </div>
+    </div>
+
+</article>
+
+
+        </main>
+        <footer>
+            <p>
+                © Yizhe&#x27;s Notebook 2023<br>
+                Powered by <a target="_blank" href="https://getzola.org/">Zola</a>, Theme <a target="_blank" href="https://github.com/zbrox/anpu-zola-theme">Anpu</a>.
+            </p>
+            <p>
+                
+                
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
