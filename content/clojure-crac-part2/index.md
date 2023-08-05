@@ -41,7 +41,7 @@ There you go! Any libraries that you asked for in `deps.edn` will be available a
 
 ## Automated checkpoint management
 
-Creating and restoring from checkpoints requires a lot of typing. To make things easier, I created [Clojure-CLI-CRaC](https://github.com/YizhePKU/Clojure-CLI-CRaC), a drop-in Clojure CLI replacement that utilizes Checkpoint/Restore. It detects changes in `deps.edn` and automatically recreate checkpoints when needed. You can find an install guide in the project README. Put it on your PATH and all your Clojure tooling should now launch faster[^2]. Hooray!
+Creating and restoring from checkpoints requires a lot of typing. To make things easier, I created [Clojure-CLI-CRaC](https://github.com/YizhePKU/Clojure-CLI-CRaC), a drop-in Clojure CLI replacement that utilizes Checkpoint/Restore. It detects changes in `deps.edn` and automatically recreate checkpoints when needed. You can find an install guide in the project README. Put it on your PATH and all your Clojure tooling should now launch faster[^2].
 
 ## Adding dependencies at runtime
 
@@ -61,4 +61,4 @@ JAVA_CMD=<JDK-CRaC-dir>/bin/java JAVA_OPTS=-XX:CRaCRestoreFrom=my_checkpoint clj
 
 However, this is no different than just launching Java manually, since most JVM options are ignored during restore. The classpath is recovered from the checkpoint, not from the command line.
 
-[^2] ...or they could stop working due to [the bug that I mentioned in part 1](@/clojure-crac/index.md#2). That bug causes whitespace in command line arguments to be misinterpreted, so filenames with spaces are likely to be affacted. I've reported the bug to the CRaC team, and hopefully it'll be fixed soon.
+[^2] ...or they could stop working due to [the upstream bug that I mentioned in part 1](@/clojure-crac/index.md#2), which causes whitespace in command line arguments to be misinterpreted. For example, Calva invokes Clojure CLI with `-Sdeps '{:deps {nrepl/nrepl {:mvn/version,"1.0.0"}}}'`, which causes trouble. I've reported the bug to the CRaC team, and hopefully it'll be fixed soon.
